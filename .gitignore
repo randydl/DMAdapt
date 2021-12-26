@@ -1,0 +1,7 @@
+temp/
+.vscode/
+__pycache__/
+.ipynb_checkpoints/
+*.npy
+*.pth
+*Untitled*
