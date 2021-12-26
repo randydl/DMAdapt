@@ -20,7 +20,8 @@ def noisify(y, num_classes, noise_rate=0.2):
         y_noise[i] = np.argmax(dist)
 
     real_noise_rate = np.mean(y_noise != y)
-    assert real_noise_rate > 0
+    if noise_rate > 0:
+        assert real_noise_rate > 0
 
     return y_noise, real_noise_rate, P
 
@@ -39,6 +40,7 @@ def noisify2(y, num_classes, noise_rate=0.2):
             y_noise[i] = np.random.choice(pool, 1)[0]
 
     real_noise_rate = np.mean(y_noise != y)
-    assert real_noise_rate > 0
+    if noise_rate > 0:
+        assert real_noise_rate > 0
 
     return y_noise, real_noise_rate

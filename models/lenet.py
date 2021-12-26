@@ -6,7 +6,7 @@ __all__ = ['LeNet']
 
 
 class LeNet(nn.Module):
-    def __init__(self, in_channels, num_classes):
+    def __init__(self, in_channels=1, num_classes=10):
         super(LeNet, self).__init__()
 
         self.feature_extractor = nn.Sequential(
