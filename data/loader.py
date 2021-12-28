@@ -9,20 +9,20 @@ sys.path.append(str(Path(__file__).parents[1]))
 from utils import noisify
 
 
-__all__ = ['Dataset']
+__all__ = ['DMAdapt']
 
 
-class Dataset(torch.utils.data.Dataset):
-    def __init__(self, name='mnist', train=True, noise_rate=0):
+class DMAdapt(torch.utils.data.Dataset):
+    def __init__(self, name='mnist', train=True, noise_rate=0, random_state=0):
         data = np.load(Path(__file__).parent/f'{name}.npz')
-        data = train_test_split(data['imgs'], data['labs'], test_size=0.2)
+        data = train_test_split(data['imgs'], data['labs'], test_size=0.2, random_state=random_state)
 
-        self.imgs = data[0] if train else data[1]
-        self.labs = noisify(data[2], num_classes=10, noise_rate=noise_rate)[0] if train else data[3]
+        self.imgs = data[0] if train else data[1]  # data == (x_train, x_test, y_train, y_test)
+        self.labs = noisify(data[2], num_classes=10, noise_rate=noise_rate, random_state=random_state)[0] if train else data[3]
 
         self.tsfm = A.Compose([
             A.Resize(32, 32),
-            A.Normalize(mean=(0,), std=(1,))
+            A.Normalize(mean=(0.1307,), std=(0.3081,))
         ])
 
     def __getitem__(self, idx):
@@ -35,5 +35,5 @@ class Dataset(torch.utils.data.Dataset):
 
 
 if __name__ == '__main__':
-    dataset = Dataset(noise_rate=0.2)
+    dataset = DMAdapt(noise_rate=0.2)
     print(len(dataset))
