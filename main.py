@@ -1,9 +1,11 @@
 import torch
 import argparse
 import numpy as np
+import pandas as pd
 import torch.nn as nn
 import torch.nn.functional as F
 from pathlib import Path
+from collections import defaultdict
 from torch.utils.data import DataLoader
 from torch.optim import AdamW, SGD
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
@@ -37,16 +39,16 @@ def main(args):
     criterion_tsf = nn.CrossEntropyLoss()  # TODO importance reweighting
 
     print('---------- Start estimate T matrix ----------')
+    records = defaultdict(list)
     for epoch in range(args.epochs_est):
         print(f'epoch: {epoch}/{args.epochs_est}')
-
-        model.train()
 
         train_loss = 0
         train_acc = 0
         val_loss = 0
         val_acc = 0
 
+        model.train()
         for step, (x, y) in enumerate(train_loader_src):
             x = x.cuda()
             y = y.cuda()
@@ -60,8 +62,9 @@ def main(args):
             optimizer_est.step()
             scheduler_est.step()
 
-        torch.save(model.state_dict(), f'ckpt/models/epoch{epoch}_est.pth')
-        print(f'train_loss: {train_loss/len(train_loader_src):.6f}, train_acc: {train_acc/len(train_data_src):.6f}')
+        train_loss /= len(train_loader_src)
+        train_acc /= len(train_data_src)
+        print(f'train_loss: {train_loss:.6f}, train_acc: {train_acc:.6f}')
 
         with torch.no_grad():
             model.eval()
@@ -74,8 +77,37 @@ def main(args):
                 preds = F.softmax(y_hat, 1).argmax(1)
                 val_acc += (preds == y).sum().item()
 
-        print(f'val_loss: {val_loss/len(val_loader_src):.6f}, val_acc: {val_acc/len(val_data_src):.6f}')
+        val_loss /= len(val_loader_src)
+        val_acc /= len(val_data_src)
+        print(f'val_loss: {val_loss:.6f}, val_acc: {val_acc:.6f}')
 
+        records['epoch'].append(epoch)
+        records['train_loss'].append(train_loss)
+        records['train_acc'].append(train_acc)
+        records['val_loss'].append(val_loss)
+        records['val_acc'].append(val_acc)
+        torch.save(model.state_dict(), f'checkpoints/models/est/epoch{epoch}.pth')
+
+    records = pd.DataFrame(records)
+    records.to_csv('checkpoints/records_est.csv', index=False)
+
+    epoch = records['val_acc'].argmax()
+    state = torch.load(f'checkpoints/models/est/epoch{epoch}.pth')
+    model.load_state_dict(state)
+    probs = []
+
+    with torch.no_grad():
+        model.eval()
+        for step, (x, y) in enumerate(est_loader_src):
+            x = x.cuda()
+            y_hat = model(x)
+            preds = F.softmax(y_hat, 1)
+            probs.append(preds)
+
+    probs = torch.cat(probs).cpu().numpy()
+    T = est_t_matrix(probs, filter_outlier=True, percentile=args.percentile)
+    np.save('checkpoints/T.npy', T)
+    np.save('checkpoints/probs.npy', probs)
 
     print('---------- Finish estimate T matrix ----------')
 
