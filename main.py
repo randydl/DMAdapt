@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import pandas as pd
 import torch.nn.functional as F
+from pathlib import Path
 from collections import defaultdict
 from torch.utils.data import DataLoader
 from torch.optim import SGD, lr_scheduler
@@ -14,6 +15,10 @@ from models import LeNet, MMDLoss, WeightCELoss
 
 def main(args):
     seed_everything(args.random_state)
+
+    save_root = Path(f'checkpoints/noise_rate_{args.noise_rate}')
+    Path(save_root/'models/est').mkdir(parents=True, exist_ok=True)
+    Path(save_root/'models/tsf').mkdir(parents=True, exist_ok=True)
 
     train_data_src = DMAdapt(name='mnist', train=True, noise_rate=args.noise_rate, random_state=args.random_state)
     val_data_src = DMAdapt(name='mnist', train=False, noise_rate=0, random_state=args.random_state)
@@ -82,13 +87,13 @@ def main(args):
         records['train_acc'].append(train_acc)
         records['val_loss'].append(val_loss)
         records['val_acc'].append(val_acc)
-        torch.save(model.state_dict(), f'checkpoints/models/est/epoch{epoch}.pth')
+        torch.save(model.state_dict(), save_root/f'models/est/epoch{epoch}.pth')
 
     records = pd.DataFrame(records)
-    records.to_csv('checkpoints/records_est.csv', index=False)
+    records.to_csv(save_root/'records_est.csv', index=False)
 
     epoch = records['val_acc'].argmax()
-    state = torch.load(f'checkpoints/models/est/epoch{epoch}.pth')
+    state = torch.load(save_root/f'models/est/epoch{epoch}.pth')
     model.load_state_dict(state)
     probs = []
 
@@ -102,13 +107,13 @@ def main(args):
 
     probs = torch.cat(probs).cpu().numpy()
     T = est_t_matrix(probs, filter_outlier=True, percentile=args.percentile)
-    np.save('checkpoints/T.npy', T)
-    np.save('checkpoints/probs.npy', probs)
+    np.save(save_root/'T.npy', T)
+    np.save(save_root/'probs.npy', probs)
     print('---------- Finish estimate T matrix ----------')
 
     print('---------- Start transfer learning ----------')
     records = defaultdict(list)
-    T = torch.as_tensor(np.load('checkpoints/T.npy')).float().cuda()
+    T = torch.as_tensor(np.load(save_root/'T.npy')).float().cuda()
     for epoch in range(args.epochs_tsf):
         print(f'epoch: {epoch}/{args.epochs_tsf}')
 
@@ -175,10 +180,10 @@ def main(args):
         records['val_loss'].append(val_loss)
         records['val_acc'].append(val_acc)
         records['test_acc'].append(test_acc)
-        torch.save(model.state_dict(), f'checkpoints/models/tsf/epoch{epoch}.pth')
+        torch.save(model.state_dict(), save_root/f'models/tsf/epoch{epoch}.pth')
 
     records = pd.DataFrame(records)
-    records.to_csv('checkpoints/records_tsf.csv', index=False)
+    records.to_csv(save_root/'records_tsf.csv', index=False)
     print('---------- Finish transfer learning ----------')
 
 

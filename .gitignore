@@ -2,5 +2,5 @@ temp/
 .vscode/
 __pycache__/
 .ipynb_checkpoints/
-*.pth
+# *.pth
 *Untitled*
