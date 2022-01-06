@@ -2,13 +2,10 @@ import torch
 import argparse
 import numpy as np
 import pandas as pd
-import torch.nn as nn
 import torch.nn.functional as F
-from pathlib import Path
 from collections import defaultdict
 from torch.utils.data import DataLoader
-from torch.optim import AdamW, SGD
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from torch.optim import SGD, lr_scheduler
 from pytorch_lightning import seed_everything
 from data import DMAdapt
 from utils import est_t_matrix
@@ -30,10 +27,9 @@ def main(args):
     val_loader_tar = DataLoader(val_data_tar, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     model = LeNet(1, args.num_classes).cuda()
-    optimizer_est = AdamW(model.parameters(), lr=args.lr_est)
-    scheduler_est = CosineAnnealingWarmRestarts(optimizer_est, T_0=len(train_loader_src), T_mult=1)
-    optimizer_tsf = AdamW(model.parameters(), lr=args.lr_tsf)
-    scheduler_tsf = CosineAnnealingWarmRestarts(optimizer_tsf, T_0=len(train_loader_src), T_mult=1)
+    optimizer_est = SGD(model.parameters(), lr=args.lr_est, weight_decay=args.weight_decay)
+    optimizer_tsf = SGD(model.parameters(), lr=args.lr_tsf, momentum=0.9, weight_decay=args.weight_decay)
+    scheduler_tsf = lr_scheduler.CosineAnnealingWarmRestarts(optimizer_tsf, T_0=len(train_loader_src), T_mult=1)
 
     criterion = WeightCELoss()
     mmd_loss_func = MMDLoss()
@@ -60,7 +56,7 @@ def main(args):
             train_acc += (preds == y).sum().item()
             loss.backward()
             optimizer_est.step()
-            scheduler_est.step()
+            # scheduler_est.step()
 
         train_loss /= len(train_loader_src)
         train_acc /= len(train_data_src)
@@ -131,7 +127,7 @@ def main(args):
             sy_hat, sfeats, tfeats = model(sx, tx)
             ce_loss = criterion(sy_hat, sy, T)
             mmd_loss = mmd_loss_func(sfeats, tfeats)
-            loss = ce_loss + args.beta * mmd_loss  # total loss
+            loss = ce_loss + args.lamb * mmd_loss  # total loss
             # print(f'ce_loss: {ce_loss:.6f} - mmd_loss: {mmd_loss:.6f} - total_loss: {loss:.6f}')
             train_loss += loss.item()
             preds = torch.matmul(F.softmax(sy_hat, dim=1), T).argmax(1)
@@ -153,7 +149,7 @@ def main(args):
                 sy_hat, sfeats, tfeats = model(sx, tx)
                 ce_loss = criterion(sy_hat, sy, T)
                 mmd_loss = mmd_loss_func(sfeats, tfeats)
-                loss = ce_loss + args.beta * mmd_loss  # total loss
+                loss = ce_loss + args.lamb * mmd_loss  # total loss
                 # print(f'ce_loss: {ce_loss:.6f} - mmd_loss: {mmd_loss:.6f} - total_loss: {loss:.6f}')
                 val_loss += loss.item()
                 preds = torch.matmul(F.softmax(sy_hat, dim=1), T).argmax(1)
@@ -191,14 +187,15 @@ if __name__ == '__main__':
     parser.add_argument('--lr_est', type=float, default=1e-2)
     parser.add_argument('--epochs_est', type=int, default=30)
     parser.add_argument('--lr_tsf', type=float, default=1e-3)
-    parser.add_argument('--epochs_tsf', type=int, default=500)
+    parser.add_argument('--epochs_tsf', type=int, default=200)
+    parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--num_classes', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--noise_rate', type=float, default=0.2)
-    parser.add_argument('--random_state', type=int, default=0)
+    parser.add_argument('--random_state', type=int, default=1)
     parser.add_argument('--percentile', type=int, default=97)
-    parser.add_argument('--beta', type=float, default=1.0)
+    parser.add_argument('--lamb', type=float, default=1.0)
     args = parser.parse_args()
 
     main(args)

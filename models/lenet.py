@@ -16,9 +16,9 @@ class LeNet(nn.Module):
             nn.Conv2d(6, 16, 5),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
-            nn.Conv2d(16, 120, 5),
-            nn.ReLU(inplace=True),
-            nn.Flatten()
+            nn.Flatten(),
+            nn.Linear(400, 120),
+            nn.ReLU(inplace=True)
         )
 
         self.classifier = nn.Sequential(
